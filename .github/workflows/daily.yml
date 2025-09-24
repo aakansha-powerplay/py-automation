@@ -27,13 +27,15 @@ jobs:
         uses: browser-actions/setup-chrome@v1
 
       - name: Set up ChromeDriver
-        uses: browser-actions/setup-chromedriver@v1
+        uses: nanasess/setup-chromedriver@v1
+        with:
+          chromedriver-version: 'latest'
 
       - name: Configure gspread credentials
         run: |
           echo "${{ secrets.GSPREAD_KEY }}" > credentials.json
 
-      - name: Run test script
+      - name: Run script
         run: python final_activity_report_share.py
         env:
           GOOGLE_APPLICATION_CREDENTIALS: credentials.json
