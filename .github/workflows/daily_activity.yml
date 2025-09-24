@@ -28,11 +28,7 @@ jobs:
           sudo apt update
           sudo apt install -y chromium-browser chromium-chromedriver
 
-      - name: Configure gspread credentials
-        run: |
-          printf "%s" "${{ secrets.GSPREAD_KEY }}" > credentials.json
-
       - name: Run Python script
         run: python final_activity_report_share.py
         env:
-          GOOGLE_APPLICATION_CREDENTIALS: credentials.json
+          GSPREAD_KEY: ${{ secrets.GSPREAD_KEY }}
