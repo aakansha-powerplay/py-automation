@@ -18,4 +18,4 @@ jobs:
           python-version: "3.x"
 
       - name: Run test script
-        run: python final_acitivity_report_share.py
+        run: python final_activity_report_share.py
