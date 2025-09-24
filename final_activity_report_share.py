@@ -18,7 +18,7 @@ print("Starting Google Sheet setup...")
 # ----- GOOGLE SHEET SETUP -----
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 
-# Load JSON directly from GitHub secret
+# Load JSON directly from secret
 creds_json = os.environ["GSPREAD_KEY"]
 creds_dict = json.loads(creds_json)
 
@@ -32,19 +32,21 @@ print("Google Sheet setup done.")
 
 # ----- SELENIUM CHROME SETUP -----
 chrome_options = Options()
-chrome_options.add_argument("--headless=new")
+chrome_options.add_argument("--headless=new")  # headless for GitHub Actions
 chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
 chrome_options.add_argument("--disable-gpu")
+chrome_options.add_argument("--window-size=1920,1080")  # ensure full-page rendering
 
 driver = webdriver.Chrome(options=chrome_options)
+
 print("Chrome driver setup done.")
 print("Opening WhatsApp Web...")
 
 driver.get("https://web.whatsapp.com")
-time.sleep(10)  # Adjust for QR scan if needed
+print("Please scan QR code if needed (only once if not cached).")
+time.sleep(15)  # wait for QR scan or session restore
 
-# ----- MAIN LOOP -----
 for j, row in enumerate(data, start=2):
     org_id = row["org id"]
     group_name = row["group_Name"]
@@ -53,7 +55,7 @@ for j, row in enumerate(data, start=2):
     if status.lower() == "msg_sent":
         continue
 
-    print(f"Processing row {j} - {group_name}")
+    print(f"\nProcessing row {j} - {group_name}")
 
     # --- RETOOL SCREENSHOT ---
     driver.execute_script("window.open('');")
@@ -62,23 +64,17 @@ for j, row in enumerate(data, start=2):
 
     try:
         print("Waiting for Retool to load...")
-
         # Wait for iframe if present
-        try:
-            iframe = WebDriverWait(driver, 30).until(
-                EC.presence_of_element_located((By.TAG_NAME, "iframe"))
-            )
-            driver.switch_to.frame(iframe)
-        except:
-            print("No iframe detected, continuing in main DOM.")
+        iframe = WebDriverWait(driver, 60).until(
+            EC.presence_of_element_located((By.TAG_NAME, "iframe"))
+        )
+        driver.switch_to.frame(iframe)
 
-        # Wait for the header or table in Retool
+        # Wait for header inside iframe
         WebDriverWait(driver, 60).until(
             EC.presence_of_element_located((By.XPATH, "//h1[text()='Activity Report']"))
         )
-
         print("Retool loaded successfully.")
-
     except Exception as e:
         print("Error loading Retool:", e)
 
@@ -87,33 +83,40 @@ for j, row in enumerate(data, start=2):
     driver.save_screenshot(screenshot_path)
     print(f"Screenshot saved: {screenshot_path}")
 
-    # --- WHATSAPP MESSAGE ---
+    # --- WHATSAPP ---
+    driver.switch_to.default_content()
     driver.switch_to.window(driver.window_handles[0])
     time.sleep(3)
 
     try:
-        # Search contact/group
-        search_box = driver.find_element(By.XPATH, "//div[@aria-label='Search input textbox']")
+        # Updated search box XPath for latest WhatsApp Web
+        search_box = WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located(
+                (By.XPATH, "//div[contains(@contenteditable,'true') and @data-tab]")
+            )
+        )
         search_box.click()
         search_box.send_keys(group_name)
-        search_box.send_keys(Keys.ENTER)
         time.sleep(2)
+        search_box.send_keys(Keys.ENTER)
+        time.sleep(3)
 
-        # Click attach button
         attach_btn = WebDriverWait(driver, 20).until(
             EC.presence_of_element_located((By.XPATH, '//button[@title="Attach"]'))
         )
         attach_btn.click()
         time.sleep(1)
 
-        # Upload screenshot
-        image_input = driver.find_element(By.XPATH, '//input[@accept="image/*,video/mp4,video/3gpp,video/quicktime"]')
+        image_input = driver.find_element(
+            By.XPATH, '//input[@accept="image/*,video/mp4,video/3gpp,video/quicktime"]'
+        )
         image_input.send_keys(screenshot_path)
         time.sleep(2)
 
-        # Click send
         send_btn = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.XPATH, '//div[@role="button" and @aria-label="Send"]'))
+            EC.element_to_be_clickable(
+                (By.XPATH, '//div[@role="button" and @aria-label="Send"]')
+            )
         )
         send_btn.click()
         time.sleep(2)
@@ -121,14 +124,14 @@ for j, row in enumerate(data, start=2):
         print(f"Message sent to {group_name}")
 
         # Update Google Sheet
-        sheet.update_cell(j, 3, "msg_sent")  # Status column (C)
-        sheet.update_cell(j, 4, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))  # Sent time (D)
+        sheet.update_cell(j, 3, "msg_sent")
+        sheet.update_cell(j, 4, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
     except Exception as e:
         print(f"Error sending to {group_name}: {e}")
         sheet.update_cell(j, 3, "error")
 
-    # Close Retool tab and switch back
+    # Close Retool tab
     driver.switch_to.window(driver.window_handles[1])
     driver.close()
     driver.switch_to.window(driver.window_handles[0])
