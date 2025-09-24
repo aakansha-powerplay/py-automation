@@ -17,7 +17,8 @@ print("Starting Google Sheet setup...")
 
 # ----- GOOGLE SHEET SETUP -----
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-# Load JSON directly from secret
+
+# Load JSON directly from GitHub secret
 creds_json = os.environ["GSPREAD_KEY"]
 creds_dict = json.loads(creds_json)
 
@@ -37,13 +38,13 @@ chrome_options.add_argument("--disable-dev-shm-usage")
 chrome_options.add_argument("--disable-gpu")
 
 driver = webdriver.Chrome(options=chrome_options)
-
 print("Chrome driver setup done.")
 print("Opening WhatsApp Web...")
 
 driver.get("https://web.whatsapp.com")
-time.sleep(10)
+time.sleep(10)  # Adjust for QR scan if needed
 
+# ----- MAIN LOOP -----
 for j, row in enumerate(data, start=2):
     org_id = row["org id"]
     group_name = row["group_Name"]
@@ -58,12 +59,26 @@ for j, row in enumerate(data, start=2):
     driver.execute_script("window.open('');")
     driver.switch_to.window(driver.window_handles[1])
     driver.get(f"https://getpp.retool.com/apps/4a16ac34-6f4a-11ef-a198-97d135a29ef7/Powerplay/ActivityReport/{org_id}")
-    print("Try block executing of retool")
+
     try:
-        print("Tried try block retool")
+        print("Waiting for Retool to load...")
+
+        # Wait for iframe if present
+        try:
+            iframe = WebDriverWait(driver, 30).until(
+                EC.presence_of_element_located((By.TAG_NAME, "iframe"))
+            )
+            driver.switch_to.frame(iframe)
+        except:
+            print("No iframe detected, continuing in main DOM.")
+
+        # Wait for the header or table in Retool
         WebDriverWait(driver, 60).until(
-            EC.visibility_of_element_located((By.XPATH, "//h1[text()='Activity Report']"))
+            EC.presence_of_element_located((By.XPATH, "//h1[text()='Activity Report']"))
         )
+
+        print("Retool loaded successfully.")
+
     except Exception as e:
         print("Error loading Retool:", e)
 
@@ -72,27 +87,31 @@ for j, row in enumerate(data, start=2):
     driver.save_screenshot(screenshot_path)
     print(f"Screenshot saved: {screenshot_path}")
 
-    # --- WHATSAPP ---
+    # --- WHATSAPP MESSAGE ---
     driver.switch_to.window(driver.window_handles[0])
     time.sleep(3)
 
     try:
+        # Search contact/group
         search_box = driver.find_element(By.XPATH, "//div[@aria-label='Search input textbox']")
         search_box.click()
         search_box.send_keys(group_name)
         search_box.send_keys(Keys.ENTER)
         time.sleep(2)
 
+        # Click attach button
         attach_btn = WebDriverWait(driver, 20).until(
             EC.presence_of_element_located((By.XPATH, '//button[@title="Attach"]'))
         )
         attach_btn.click()
         time.sleep(1)
 
+        # Upload screenshot
         image_input = driver.find_element(By.XPATH, '//input[@accept="image/*,video/mp4,video/3gpp,video/quicktime"]')
         image_input.send_keys(screenshot_path)
         time.sleep(2)
 
+        # Click send
         send_btn = WebDriverWait(driver, 10).until(
             EC.element_to_be_clickable((By.XPATH, '//div[@role="button" and @aria-label="Send"]'))
         )
@@ -101,14 +120,15 @@ for j, row in enumerate(data, start=2):
 
         print(f"Message sent to {group_name}")
 
-        # Update sheet
-        sheet.update_cell(j, 3, "msg_sent")
-        sheet.update_cell(j, 4, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        # Update Google Sheet
+        sheet.update_cell(j, 3, "msg_sent")  # Status column (C)
+        sheet.update_cell(j, 4, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))  # Sent time (D)
 
     except Exception as e:
         print(f"Error sending to {group_name}: {e}")
         sheet.update_cell(j, 3, "error")
 
+    # Close Retool tab and switch back
     driver.switch_to.window(driver.window_handles[1])
     driver.close()
     driver.switch_to.window(driver.window_handles[0])
