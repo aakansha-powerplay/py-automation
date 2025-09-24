@@ -1,4 +1,4 @@
-name: Script Daily Run - Sheet to WhatsApp
+name: Script Daily Run - Sheet to WA
 
 on:
   schedule:
@@ -8,6 +8,8 @@ on:
 jobs:
   run-script:
     runs-on: ubuntu-latest
+    env:
+      GSPREAD_KEY: ${{ secrets.GSPREAD_KEY }}
 
     steps:
       - name: Checkout repository
@@ -18,17 +20,16 @@ jobs:
         with:
           python-version: "3.x"
 
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install selenium gspread oauth2client pillow
+          pip install selenium pillow gspread oauth2client
 
-      - name: Install Chromium & ChromeDriver
-        run: |
-          sudo apt update
-          sudo apt install -y chromium-browser chromium-chromedriver
+      - name: Set up Chrome
+        uses: browser-actions/setup-chrome@v1
 
-      - name: Run Python script
+      - name: Set up ChromeDriver
+        uses: nanasess/setup-chromedriver@v1
+
+      - name: Run script
         run: python final_activity_report_share.py
-        env:
-          GSPREAD_KEY: ${{ secrets.GSPREAD_KEY }}
