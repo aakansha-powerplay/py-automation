@@ -58,8 +58,9 @@ for j, row in enumerate(data, start=2):
     driver.execute_script("window.open('');")
     driver.switch_to.window(driver.window_handles[1])
     driver.get(f"https://getpp.retool.com/apps/4a16ac34-6f4a-11ef-a198-97d135a29ef7/Powerplay/ActivityReport/{org_id}")
-
+    print("Try block executing of retool")
     try:
+        print("Tried try block retool")
         WebDriverWait(driver, 60).until(
             EC.visibility_of_element_located((By.XPATH, "//h1[text()='Activity Report']"))
         )
