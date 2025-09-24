@@ -1,16 +1,13 @@
-name: Script Daily Run - Sheet to WA
+name: Daily Activity Report
 
 on:
   schedule:
-    - cron: "30 3 * * *"  # 9:00 AM IST
+    - cron: "0 9 * * *"   # Runs daily at 9:00 AM UTC
   workflow_dispatch:
 
 jobs:
   run-script:
     runs-on: ubuntu-latest
-    env:
-      GSPREAD_KEY: ${{ secrets.GSPREAD_KEY }}
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -18,15 +15,25 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: "3.x"
+          python-version: 3.13
 
-      - name: Install Python dependencies
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install selenium pillow gspread oauth2client
+          pip install gspread oauth2client selenium
 
       - name: Set up Chrome
-        uses: browser-actions/setup-chrome@v1
+        uses: nanasess/setup-chromedriver@v1
+        with:
+          chrome-version: latest
 
-      - name: Run script
+      - name: Run Python script
+        env:
+          GSPREAD_KEY: ${{ secrets.GSPREAD_KEY }}
         run: python final_activity_report_share.py
+
+      - name: Upload screenshots
+        uses: actions/upload-artifact@v3
+        with:
+          name: activity-screenshots
+          path: /tmp/screenshot_*.png
