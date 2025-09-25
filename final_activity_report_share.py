@@ -20,7 +20,7 @@ creds_json = json.loads(os.getenv("GSPREAD_KEY"))
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_json, scope)
 client = gspread.authorize(creds)
 
-sheet = client.open("Activity Report Share").sheet1
+sheet = client.open("activity_tracker").sheet1
 data = sheet.get_all_records()
 print(f"✅ Loaded {len(data)} rows from Google Sheet.")
 
