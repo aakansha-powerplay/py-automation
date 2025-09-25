@@ -30,7 +30,7 @@ print("Google Sheet setup done.")
 
 # ----- SELENIUM CHROME SETUP -----
 chrome_options = Options()
-chrome_options.add_argument("--headless=new")  # Use --headless=new for newer Chrome
+chrome_options.add_argument("--headless=new")  # Headless mode for GitHub Actions
 chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
 chrome_options.add_argument("--disable-gpu")
@@ -41,8 +41,18 @@ print("Chrome driver setup done.")
 print("Opening WhatsApp Web...")
 
 driver.get("https://web.whatsapp.com")
-time.sleep(10)  # scan QR manually if needed
+time.sleep(5)  # allow initial page load
 
+# ----- LOAD WHATSAPP COOKIES -----
+cookies = json.loads(os.environ["WHATSAPP_COOKIES"])
+for cookie in cookies:
+    cookie.pop("sameSite", None)  # remove SameSite for GitHub headless Chrome
+    driver.add_cookie(cookie)
+
+driver.refresh()  # apply cookies
+time.sleep(5)
+
+# ----- MAIN LOOP -----
 for j, row in enumerate(data, start=2):
     org_id = row["org id"]
     group_name = row["group_Name"]
