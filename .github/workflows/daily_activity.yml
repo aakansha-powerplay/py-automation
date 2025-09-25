@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GSPREAD_KEY: ${{ secrets.GSPREAD_KEY }}
+      WHATSAPP_COOKIES: ${{ secrets.WHATSAPP_COOKIES }}
 
     steps:
       - name: Checkout repository
@@ -25,7 +26,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install selenium pillow gspread oauth2client
 
-      - name: Set up Chrome (includes ChromeDriver)
+      - name: Set up Chrome
         uses: browser-actions/setup-chrome@v1
 
       - name: Run script
