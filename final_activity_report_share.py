@@ -5,17 +5,16 @@ import os
 import json
 from oauth2client.service_account import ServiceAccountCredentials
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-print("Starting script...")
-print("Starting Google Sheet setup...")
+print("🚀 Starting script...")
 
 # ----- GOOGLE SHEET SETUP -----
+print("📑 Setting up Google Sheet...")
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds_json = os.environ["GSPREAD_KEY"]
 creds_dict = json.loads(creds_json)
@@ -25,78 +24,99 @@ client = gspread.authorize(creds)
 
 sheet = client.open("activity_tracker").sheet1  # Replace with your sheet name
 data = sheet.get_all_records()
-
-print("Google Sheet setup done.")
+print(f"✅ Loaded {len(data)} rows from Google Sheet.")
 
 # ----- SELENIUM CHROME SETUP -----
 chrome_options = Options()
-chrome_options.add_argument("--headless=new")  # Headless mode for GitHub Actions
+chrome_options.add_argument("--headless=new")
 chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
 chrome_options.add_argument("--disable-gpu")
 chrome_options.add_argument("--window-size=1920,1080")
 
 driver = webdriver.Chrome(options=chrome_options)
-print("Chrome driver setup done.")
-print("Opening WhatsApp Web...")
+print("✅ Chrome driver setup done.")
 
+# ----- WHATSAPP LOGIN -----
+print("🌐 Opening WhatsApp Web...")
 driver.get("https://web.whatsapp.com")
-time.sleep(5)  # allow initial page load
 
-# ----- LOAD WHATSAPP COOKIES -----
-cookies = json.loads(os.environ["WHATSAPP_COOKIES"])
-for cookie in cookies:
-    cookie.pop("sameSite", None)  # remove SameSite for GitHub headless Chrome
-    driver.add_cookie(cookie)
+# Load cookies if present
+whatsapp_cookies = os.environ.get("WHATSAPP_COOKIES")
+if whatsapp_cookies:
+    try:
+        cookies = json.loads(whatsapp_cookies)
+        driver.delete_all_cookies()
+        for cookie in cookies:
+            driver.add_cookie(cookie)
+        print(f"✅ Loaded {len(cookies)} WhatsApp cookies.")
+        driver.refresh()
+    except Exception as e:
+        print(f"⚠️ Error loading cookies: {e}")
 
-driver.refresh()  # apply cookies
-time.sleep(5)
+# Check if QR or Chat loaded
+try:
+    WebDriverWait(driver, 15).until(
+        EC.presence_of_element_located((By.XPATH, "//div[@role='textbox']"))
+    )
+    print("✅ WhatsApp session restored successfully.")
+except:
+    try:
+        qr_present = driver.find_element(By.XPATH, "//canvas[@aria-label='Scan me!']")
+        print("⚠️ QR code detected — cookies are invalid/expired. Please login locally and update WHATSAPP_COOKIES secret.")
+        driver.save_screenshot("/tmp/whatsapp_qr_detected.png")
+    except:
+        print("❌ WhatsApp neither loaded chat nor QR. Check network/cookies.")
+        driver.save_screenshot("/tmp/whatsapp_login_failed.png")
 
-# ----- MAIN LOOP -----
+# ----- PROCESS ROWS -----
 for j, row in enumerate(data, start=2):
-    org_id = row["org id"]
-    group_name = row["group_Name"]
-    status = row["Status"]
+    org_id = row.get("org id")
+    chat_name = row.get("group_Name")
+    status = row.get("Status")
 
-    if status.lower() == "msg_sent":
+    if not org_id or not chat_name:
+        print(f"⚠️ Row {j} skipped (missing org_id or chat_name).")
         continue
 
-    print(f"Processing row {j} - {group_name}")
+    if status and status.lower() == "msg_sent":
+        continue
 
-    # --- RETOOL SCREENSHOT ---
+    print(f"➡️ Processing row {j} - Chat: {chat_name}")
+
+    # --- RETOOL SCREENSHOT (PUBLIC LINK) ---
     driver.execute_script("window.open('');")
     driver.switch_to.window(driver.window_handles[1])
-    driver.get(f"https://getpp.retool.com/apps/4a16ac34-6f4a-11ef-a198-97d135a29ef7/Powerplay/ActivityReport/{org_id}")
+    public_url = f"https://getpp.retool.com/embedded/public/0ff1d82d-d7b9-412e-9c43-2b0123a5529f/activity_report?org={org_id}"
+    driver.get(public_url)
 
     screenshot_path = f"/tmp/screenshot_{org_id}_{int(time.time())}.png"
     try:
-        print("Waiting for Retool to load...")
         WebDriverWait(driver, 60).until(
-            EC.visibility_of_element_located((By.XPATH, "//h1[text()='Activity Report']"))
+            EC.presence_of_element_located((By.TAG_NAME, "body"))
         )
     except Exception as e:
-        print(f"Error loading Retool for {org_id}: {e}")
+        print(f"⚠️ Retool public link failed for {org_id}: {e}")
+        driver.save_screenshot(f"/tmp/retool_error_{org_id}.png")
 
     time.sleep(3)
     driver.save_screenshot(screenshot_path)
-    print(f"Screenshot saved: {screenshot_path}")
+    print(f"📸 Screenshot saved: {screenshot_path}")
 
     # --- WHATSAPP MESSAGE ---
     driver.switch_to.window(driver.window_handles[0])
     time.sleep(3)
 
     try:
-        # Search for group
         search_box = WebDriverWait(driver, 20).until(
             EC.presence_of_element_located((By.XPATH, "//div[@contenteditable='true' and @data-tab='3']"))
         )
         search_box.click()
         search_box.clear()
-        search_box.send_keys(group_name)
+        search_box.send_keys(chat_name)
         search_box.send_keys(Keys.ENTER)
         time.sleep(2)
 
-        # Attach screenshot
         attach_btn = WebDriverWait(driver, 20).until(
             EC.element_to_be_clickable((By.XPATH, '//span[@data-icon="clip"]'))
         )
@@ -113,16 +133,15 @@ for j, row in enumerate(data, start=2):
         send_btn.click()
         time.sleep(2)
 
-        print(f"Message sent to {group_name}")
+        print(f"✅ Message sent to {chat_name}")
         sheet.update_cell(j, 3, "msg_sent")
         sheet.update_cell(j, 4, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
     except Exception as e:
-        print(f"Error sending to {group_name}: {e}")
-        # Save screenshot for debugging
+        print(f"❌ Error sending to {chat_name}: {e}")
         error_screenshot = f"/tmp/error_{org_id}_{int(time.time())}.png"
         driver.save_screenshot(error_screenshot)
-        print(f"Error screenshot saved: {error_screenshot}")
+        print(f"📸 Error screenshot saved: {error_screenshot}")
         sheet.update_cell(j, 3, "error")
 
     driver.switch_to.window(driver.window_handles[1])
@@ -130,4 +149,4 @@ for j, row in enumerate(data, start=2):
     driver.switch_to.window(driver.window_handles[0])
 
 driver.quit()
-print("Script completed.")
+print("🎯 Script completed.")
