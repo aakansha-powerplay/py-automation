@@ -28,7 +28,8 @@ print(f"✅ Loaded {len(data)} rows from Google Sheet.")
 #  CHROME + SELENIUM SETUP
 # =========================
 chrome_options = Options()
-chrome_options.add_argument("--headless=new")
+# ⬇ Disable headless to see QR and scan manually
+# chrome_options.add_argument("--headless=new")
 chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
 chrome_options.add_argument("--window-size=1920,1080")
@@ -37,38 +38,21 @@ driver = webdriver.Chrome(options=chrome_options)
 print("✅ Chrome driver setup done.")
 
 # =========================
-#  WHATSAPP LOGIN VIA COOKIES
+#  WHATSAPP LOGIN - MANUAL QR
 # =========================
-print("🌐 Opening WhatsApp Web...")
+print("🌐 Opening WhatsApp Web (QR will be displayed)...")
 driver.get("https://web.whatsapp.com")
-cookies_env = os.getenv("WHATSAPP_COOKIES")
 
-if not cookies_env:
-    print("❌ No cookies found in env. QR login required.")
-else:
-    try:
-        cookies = json.loads(cookies_env)
-        for cookie in cookies:
-            driver.add_cookie(cookie)
-        print(f"✅ Loaded {len(cookies)} WhatsApp cookies. Reloading page...")
-        driver.refresh()
-        time.sleep(5)
-        # Debug check: QR or chat screen?
-        try:
-            WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "canvas"))
-            )
-            print("⚠️ WhatsApp shows QR code — cookies may be invalid or expired.")
-        except:
-            try:
-                WebDriverWait(driver, 10).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, "div[role='grid']"))
-                )
-                print("✅ WhatsApp chat list loaded successfully.")
-            except:
-                print("❌ WhatsApp neither loaded chat nor QR. Check network/cookies.")
-    except Exception as e:
-        print(f"❌ Failed to load cookies: {e}")
+try:
+    # Wait until user scans QR and chat list loads
+    WebDriverWait(driver, 60).until(
+        EC.presence_of_element_located((By.CSS_SELECTOR, "div[role='grid']"))
+    )
+    print("✅ WhatsApp chat list loaded successfully. Login complete.")
+except Exception:
+    print("❌ Timeout waiting for QR scan. Please rerun and scan faster.")
+    driver.quit()
+    exit(1)
 
 # =========================
 #  PROCESS EACH ROW
@@ -81,7 +65,6 @@ for j, row in enumerate(data, start=2):
 
         print(f"➡️ Processing row {j} - Chat: {group_name} | Org: {org_id}")
 
-        # Skip if org_id missing
         if not org_id:
             print(f"⚠️ Skipping row {j}: Missing org_id")
             continue
@@ -94,7 +77,6 @@ for j, row in enumerate(data, start=2):
 
         screenshot_path = f"/tmp/screenshot_{org_id}_{int(time.time())}.png"
         try:
-            # Wait until Retool loads a widget container
             WebDriverWait(driver, 60).until(
                 EC.presence_of_element_located((By.XPATH, "//div[contains(@class,'retool-widget-container')]"))
             )
@@ -103,7 +85,7 @@ for j, row in enumerate(data, start=2):
             print(f"⚠️ Retool public link failed or slow for {org_id}: {e}")
             driver.save_screenshot(f"/tmp/retool_error_{org_id}.png")
 
-        time.sleep(5)  # give UI a little more time
+        time.sleep(5)
         driver.save_screenshot(screenshot_path)
         print(f"📸 Screenshot saved: {screenshot_path}")
 
@@ -115,6 +97,7 @@ for j, row in enumerate(data, start=2):
             WebDriverWait(driver, 20).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, "div[role='grid']"))
             )
+
             search_box = WebDriverWait(driver, 20).until(
                 EC.presence_of_element_located((By.XPATH, "//div[@contenteditable='true'][@data-tab='3']"))
             )
@@ -122,13 +105,11 @@ for j, row in enumerate(data, start=2):
             search_box.send_keys(group_name)
             time.sleep(3)
 
-            # click first chat result
             chat = WebDriverWait(driver, 10).until(
                 EC.element_to_be_clickable((By.XPATH, "//span[@title='" + group_name + "']"))
             )
             chat.click()
 
-            # attach and send screenshot
             attach = WebDriverWait(driver, 10).until(
                 EC.element_to_be_clickable((By.CSS_SELECTOR, "span[data-icon='clip']"))
             )
