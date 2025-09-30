@@ -27,7 +27,6 @@ print(f"✅ Loaded {len(data)} rows from Google Sheet.")
 # =========================
 #  CHROME + SELENIUM SETUP
 # =========================
-chrome_options = Options()
 # ⬇ Disable headless to see QR and scan manually
 # chrome_options.add_argument("--headless=new")
 chrome_options = Options()
