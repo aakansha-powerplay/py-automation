@@ -29,7 +29,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y wget unzip xvfb
           sudo apt-get install -y chromium-browser chromium-chromedriver
-          pip install -r requirements.txt
 
       - name: Set up Chrome
         uses: browser-actions/setup-chrome@v1
