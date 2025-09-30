@@ -26,11 +26,15 @@ jobs:
           python -m pip install --upgrade pip
           pip install selenium pillow gspread oauth2client
           sudo apt-get update
-          sudo apt-get install -y wget unzip xvfb
-          sudo apt-get install -y chromium-browser chromium-chromedriver
-
-      - name: Set up Chrome
-        uses: browser-actions/setup-chrome@v1
+          sudo apt-get install -y wget unzip
+          wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo apt-get install -y ./google-chrome-stable_current_amd64.deb
+          rm google-chrome-stable_current_amd64.deb
+          CHROMEDRIVER_VERSION=$(curl -s "https://chromedriver.storage.googleapis.com/LATEST_RELEASE")
+          wget https://chromedriver.storage.googleapis.com/${CHROMEDRIVER_VERSION}/chromedriver_linux64.zip
+          unzip chromedriver_linux64.zip
+          sudo mv chromedriver /usr/local/bin/
+          rm chromedriver_linux64.zip
 
       - name: Run script
         run: python final_activity_report_share.py
